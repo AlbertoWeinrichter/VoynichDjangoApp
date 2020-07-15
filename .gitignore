@@ -1,0 +1,7 @@
+.idea
+
+frontend/node_modules
+frontend/.nuxt
+
+backend/backend_venv/
+*.pyc

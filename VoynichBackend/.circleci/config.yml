@@ -1,0 +1,70 @@
+version: 2
+
+jobs:
+  # Commits to development branch
+  docker-build-development:
+    docker:
+      - image: circleci/node:10.15.0
+
+    working_directory: ~/repo
+
+    steps:
+      - checkout
+
+      - setup_remote_docker:
+          docker_layer_caching: true
+
+      - run: |
+          docker build -t ${DOCKERHUB_USERNAME}/backend-staging -f docker/Dockerfile.staging .
+          docker login -u ${DOCKERHUB_USERNAME} -p ${DOCKERHUB_PASSWORD}
+          docker push ${DOCKERHUB_USERNAME}/backend-staging
+      - run: |
+          ssh-keyscan ${DJANGO_DOMAIN_NAME}.com >> ~/.ssh/known_hosts
+      - run: |
+          ssh ubuntu@${DJANGO_DOMAIN_NAME}.com sudo docker system prune -f
+          ssh ubuntu@${DJANGO_DOMAIN_NAME}.com sudo docker pull ${DOCKERHUB_USERNAME}/backend-staging
+          ssh ubuntu@${DJANGO_DOMAIN_NAME}.com 'cd ${APP_NAME} && docker-compose down'
+          ssh ubuntu@${DJANGO_DOMAIN_NAME}.com 'cd ${APP_NAME} && docker-compose up -d'
+
+  # Commits to master branch
+  docker-build-production:
+    docker:
+      - image: circleci/python:3.6.1
+
+    working_directory: ~/repo
+
+    steps:
+      - checkout
+
+      - setup_remote_docker:
+          docker_layer_caching: true
+
+      - run: |
+          docker build -t ${DOCKERHUB_USERNAME}/backend-production -f docker/Dockerfile.production .
+          docker login -u ${DOCKERHUB_USERNAME} -p ${DOCKERHUB_PASSWORD}
+          docker push ${DOCKERHUB_USERNAME}/backend-production
+
+      - run: |
+          ssh-keyscan ${DJANGO_DOMAIN_NAME}.com >> ~/.ssh/known_hosts
+
+      - run: |
+          ssh ubuntu@${DJANGO_DOMAIN_NAME}.com sudo docker system prune -f
+          ssh ubuntu@${DJANGO_DOMAIN_NAME}.com sudo docker pull ${DOCKERHUB_USERNAME}/backend-production
+          ssh ubuntu@${DJANGO_DOMAIN_NAME}.com 'cd ${APP_NAME} && docker-compose down'
+          ssh ubuntu@${DJANGO_DOMAIN_NAME}.com 'cd ${APP_NAME} && docker-compose up -d'
+
+workflows:
+  version: 2
+  build-deploy:
+    jobs:
+      - docker-build-development:
+          filters:
+            branches:
+              only:
+                - development
+
+      - docker-build-production:
+          filters:
+            branches:
+              only:
+                - master
